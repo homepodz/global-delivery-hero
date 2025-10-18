@@ -1,6 +1,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useRef, useState, useEffect } from "react";
 import * as THREE from "three";
+import { getRandomCity } from "@/data/mockShopActivity";
 
 // Helper function to get position on sphere surface
 function getPositionOnSphere(longitude: number, latitude: number, radius: number) {
@@ -517,6 +518,132 @@ function CameraController({ phase }: { phase: number }) {
   return null;
 }
 
+// City delivery pings
+interface Ping {
+  id: number;
+  position: THREE.Vector3;
+  startTime: number;
+  city: string;
+}
+
+function DeliveryPings() {
+  const [pings, setPings] = useState<Ping[]>([]);
+  const nextId = useRef(0);
+
+  useEffect(() => {
+    const addPing = () => {
+      const city = getRandomCity();
+      const position = getPositionOnSphere(city.lon, city.lat, 2.55);
+      
+      setPings((prev) => [
+        ...prev,
+        {
+          id: nextId.current++,
+          position,
+          startTime: Date.now(),
+          city: city.name,
+        },
+      ]);
+
+      // Remove old pings after animation
+      setTimeout(() => {
+        setPings((prev) => prev.filter((p) => p.id !== nextId.current - 1));
+      }, 3000);
+    };
+
+    // Initial ping
+    const initialDelay = Math.random() * 3000 + 2000;
+    const initialTimer = setTimeout(addPing, initialDelay);
+
+    // Recurring pings with jitter (4-9s)
+    const scheduleNext = () => {
+      const interval = Math.random() * 5000 + 4000;
+      return setTimeout(() => {
+        addPing();
+        scheduleNext();
+      }, interval);
+    };
+
+    const recurringTimer = scheduleNext();
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearTimeout(recurringTimer);
+    };
+  }, []);
+
+  return (
+    <group>
+      {pings.map((ping) => (
+        <Ping key={ping.id} {...ping} />
+      ))}
+    </group>
+  );
+}
+
+function Ping({ position, startTime, city }: Ping) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const glowRef = useRef<THREE.Mesh>(null);
+
+  useFrame(() => {
+    const elapsed = Date.now() - startTime;
+    const t = Math.min(elapsed / 2500, 1); // 2.5s total animation
+
+    if (meshRef.current && glowRef.current) {
+      // Fade in, hold, fade out
+      let opacity = 0;
+      if (t < 0.15) {
+        opacity = t / 0.15; // Fade in
+      } else if (t < 0.7) {
+        opacity = 1; // Hold
+      } else {
+        opacity = 1 - (t - 0.7) / 0.3; // Fade out
+      }
+
+      // Pulsing scale
+      const scale = 1 + Math.sin(t * Math.PI * 3) * 0.3;
+      meshRef.current.scale.setScalar(scale * 0.08);
+      glowRef.current.scale.setScalar(scale * 0.15);
+
+      // Update opacity
+      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = opacity * 0.9;
+      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = opacity * 0.4;
+    }
+  });
+
+  const normal = getSurfaceNormal(position);
+  const up = new THREE.Vector3(0, 1, 0);
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
+  const euler = new THREE.Euler().setFromQuaternion(quaternion);
+
+  return (
+    <group position={position} rotation={[euler.x, euler.y, euler.z]}>
+      {/* Core ping */}
+      <mesh ref={meshRef}>
+        <circleGeometry args={[1, 32]} />
+        <meshBasicMaterial
+          color="#60a5fa"
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Glow ring */}
+      <mesh ref={glowRef} position={[0, 0, -0.01]}>
+        <ringGeometry args={[0.8, 1.4, 32]} />
+        <meshBasicMaterial
+          color="#3b82f6"
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      {/* Small point light for extra glow */}
+      <pointLight color="#60a5fa" intensity={0.5} distance={0.5} />
+    </group>
+  );
+}
+
 // Main animation component
 const DeliveryAnimation = () => {
   const [phase, setPhase] = useState(0);
@@ -585,6 +712,7 @@ const DeliveryAnimation = () => {
         
         {/* Scene elements */}
         <Globe />
+        <DeliveryPings />
         <FlightPathTrail />
         <TruckPathTrail visible={truckActive} />
         {phase === 0 && <Airplane onComplete={() => setShowWarehouse(true)} />}

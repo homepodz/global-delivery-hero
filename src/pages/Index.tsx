@@ -2,6 +2,7 @@ import HeroSection from "@/components/HeroSection";
 import FeaturesSection from "@/components/FeaturesSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
 import Footer from "@/components/Footer";
+import SocialProofToast from "@/components/SocialProofToast";
 
 const Index = () => {
   return (
@@ -10,6 +11,7 @@ const Index = () => {
       <FeaturesSection />
       <HowItWorksSection />
       <Footer />
+      <SocialProofToast />
     </div>
   );
 };
