@@ -1,298 +1,413 @@
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { OrbitControls, Sphere, useTexture } from "@react-three/drei";
+import { useRef, useState, useEffect } from "react";
+import * as THREE from "three";
 
-const DeliveryAnimation = () => {
-  const [pathLength, setPathLength] = useState(0);
-
-  useEffect(() => {
-    setPathLength(1);
-  }, []);
+// Globe component with realistic lighting
+function Globe() {
+  const meshRef = useRef<THREE.Mesh>(null);
+  
+  useFrame(() => {
+    if (meshRef.current) {
+      meshRef.current.rotation.y += 0.001;
+    }
+  });
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      {/* Ambient glow background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--gradient-globe))] opacity-60" />
+    <mesh ref={meshRef} position={[0, 0, 0]}>
+      <sphereGeometry args={[2.5, 64, 64]} />
+      <meshPhongMaterial 
+        color="#3b82f6"
+        emissive="#1e40af"
+        emissiveIntensity={0.2}
+        shininess={30}
+        opacity={0.95}
+        transparent
+      />
+      {/* Latitude lines */}
+      <mesh>
+        <torusGeometry args={[2.5, 0.005, 16, 100]} />
+        <meshBasicMaterial color="#60a5fa" opacity={0.3} transparent />
+      </mesh>
+      <mesh rotation={[Math.PI / 6, 0, 0]}>
+        <torusGeometry args={[2.5, 0.005, 16, 100]} />
+        <meshBasicMaterial color="#60a5fa" opacity={0.3} transparent />
+      </mesh>
+      <mesh rotation={[-Math.PI / 6, 0, 0]}>
+        <torusGeometry args={[2.5, 0.005, 16, 100]} />
+        <meshBasicMaterial color="#60a5fa" opacity={0.3} transparent />
+      </mesh>
+      {/* Add minimalistic continents */}
+      <Continents />
+    </mesh>
+  );
+}
 
-      {/* Globe container with rotation */}
-      <motion.div
-        className="relative"
-        animate={{ rotate: 360 }}
-        transition={{
-          duration: 120,
-          repeat: Infinity,
-          ease: "linear",
-        }}
+// Simplified continent shapes
+function Continents() {
+  return (
+    <group>
+      {/* North America-like shape */}
+      <mesh position={[-0.8, 1.2, 1.8]} rotation={[0.3, 0.5, 0]}>
+        <boxGeometry args={[0.6, 0.8, 0.1]} />
+        <meshPhongMaterial color="#1e3a8a" opacity={0.4} transparent />
+      </mesh>
+      {/* Europe/Asia-like shape */}
+      <mesh position={[1.2, 0.8, 1.5]} rotation={[0.2, -0.3, 0]}>
+        <boxGeometry args={[1.2, 0.5, 0.1]} />
+        <meshPhongMaterial color="#1e3a8a" opacity={0.4} transparent />
+      </mesh>
+      {/* South America-like shape */}
+      <mesh position={[-0.5, -1.0, 2.0]} rotation={[-0.4, 0.2, 0]}>
+        <boxGeometry args={[0.4, 0.7, 0.1]} />
+        <meshPhongMaterial color="#1e3a8a" opacity={0.4} transparent />
+      </mesh>
+      {/* Africa-like shape */}
+      <mesh position={[0.6, -0.3, 2.2]} rotation={[0.1, -0.1, 0]}>
+        <boxGeometry args={[0.7, 0.9, 0.1]} />
+        <meshPhongMaterial color="#1e3a8a" opacity={0.4} transparent />
+      </mesh>
+    </group>
+  );
+}
+
+// Airplane following a curved path on globe
+function Airplane() {
+  const meshRef = useRef<THREE.Group>(null);
+  const [progress, setProgress] = useState(0);
+
+  useFrame((state, delta) => {
+    setProgress((prev) => (prev + delta * 0.08) % 1);
+    
+    if (meshRef.current) {
+      // Calculate position on globe surface along great circle
+      const angle = progress * Math.PI * 1.5; // 270 degrees
+      const radius = 2.6;
+      
+      // Start from one side, curve around to destination
+      const x = Math.cos(angle) * radius * Math.cos(progress * Math.PI * 0.5);
+      const y = Math.sin(progress * Math.PI * 0.5) * radius * 0.8;
+      const z = Math.sin(angle) * radius * Math.cos(progress * Math.PI * 0.5);
+      
+      meshRef.current.position.set(x, y, z);
+      
+      // Rotate to follow path direction
+      meshRef.current.lookAt(
+        Math.cos(angle + 0.1) * radius,
+        y + 0.1,
+        Math.sin(angle + 0.1) * radius
+      );
+    }
+  });
+
+  return (
+    <group ref={meshRef}>
+      {/* Airplane body */}
+      <mesh rotation={[0, Math.PI / 2, 0]}>
+        <coneGeometry args={[0.08, 0.25, 8]} />
+        <meshPhongMaterial color="#f97316" emissive="#ea580c" emissiveIntensity={0.5} />
+      </mesh>
+      {/* Wings */}
+      <mesh position={[-0.05, 0, 0]} rotation={[0, 0, 0]}>
+        <boxGeometry args={[0.08, 0.02, 0.35]} />
+        <meshPhongMaterial color="#f97316" emissive="#ea580c" emissiveIntensity={0.3} />
+      </mesh>
+      {/* Tail */}
+      <mesh position={[-0.15, 0.05, 0]} rotation={[0, 0, Math.PI / 4]}>
+        <boxGeometry args={[0.08, 0.12, 0.02]} />
+        <meshPhongMaterial color="#f97316" emissive="#ea580c" emissiveIntensity={0.3} />
+      </mesh>
+      {/* Glow effect */}
+      <pointLight color="#f97316" intensity={0.8} distance={1} />
+    </group>
+  );
+}
+
+// 3D Warehouse that appears at destination
+function Warehouse() {
+  const meshRef = useRef<THREE.Group>(null);
+  const [visible, setVisible] = useState(false);
+  const [scale, setScale] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(true);
+      setScale(1);
+      setTimeout(() => {
+        setScale(0);
+        setTimeout(() => setVisible(false), 500);
+      }, 4000);
+    }, 12000);
+    
+    setTimeout(() => {
+      setVisible(true);
+      setScale(1);
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useFrame(() => {
+    if (meshRef.current) {
+      meshRef.current.scale.setScalar(THREE.MathUtils.lerp(meshRef.current.scale.x, visible ? scale : 0, 0.1));
+    }
+  });
+
+  return (
+    <group ref={meshRef} position={[2.0, 0.5, 1.5]}>
+      {/* Warehouse building */}
+      <mesh position={[0, 0.15, 0]}>
+        <boxGeometry args={[0.4, 0.3, 0.35]} />
+        <meshPhongMaterial color="#6b7280" />
+      </mesh>
+      {/* Roof */}
+      <mesh position={[0, 0.35, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <coneGeometry args={[0.28, 0.15, 4]} />
+        <meshPhongMaterial color="#4b5563" />
+      </mesh>
+      {/* Door */}
+      <mesh position={[0.21, 0.05, 0]}>
+        <boxGeometry args={[0.02, 0.15, 0.12]} />
+        <meshPhongMaterial color="#1f2937" />
+      </mesh>
+      {/* Location pin above warehouse */}
+      <mesh position={[0, 0.6, 0]}>
+        <sphereGeometry args={[0.06, 16, 16]} />
+        <meshPhongMaterial color="#ef4444" emissive="#dc2626" emissiveIntensity={0.5} />
+      </mesh>
+      <mesh position={[0, 0.5, 0]}>
+        <coneGeometry args={[0.04, 0.12, 8]} />
+        <meshPhongMaterial color="#ef4444" emissive="#dc2626" emissiveIntensity={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+// Delivery truck traveling on globe surface
+function DeliveryTruck() {
+  const meshRef = useRef<THREE.Group>(null);
+  const [progress, setProgress] = useState(0);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActive(true);
+      setProgress(0);
+      setTimeout(() => setActive(false), 4000);
+    }, 12000);
+    
+    setTimeout(() => {
+      setActive(true);
+      setProgress(0);
+    }, 8500);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useFrame((state, delta) => {
+    if (active) {
+      setProgress((prev) => Math.min(prev + delta * 0.15, 1));
+    }
+    
+    if (meshRef.current && active) {
+      // Path from warehouse to house on globe surface
+      const startAngle = 0.3;
+      const endAngle = -0.8;
+      const angle = startAngle + (endAngle - startAngle) * progress;
+      const radius = 2.65;
+      
+      const x = Math.cos(angle) * radius * 1.5;
+      const y = 0.3 + Math.sin(progress * Math.PI) * 0.3;
+      const z = Math.sin(angle) * radius;
+      
+      meshRef.current.position.set(x, y, z);
+      meshRef.current.rotation.y = -angle + Math.PI / 2;
+      
+      // Scale based on perspective
+      const perspectiveScale = 0.8 + Math.sin(progress * Math.PI) * 0.2;
+      meshRef.current.scale.setScalar(perspectiveScale);
+    }
+  });
+
+  if (!active && progress === 0) return null;
+
+  return (
+    <group ref={meshRef}>
+      {/* Truck cabin */}
+      <mesh position={[0.08, 0.08, 0]}>
+        <boxGeometry args={[0.12, 0.12, 0.16]} />
+        <meshPhongMaterial color="#f97316" />
+      </mesh>
+      {/* Truck cargo */}
+      <mesh position={[-0.08, 0.08, 0]}>
+        <boxGeometry args={[0.15, 0.12, 0.16]} />
+        <meshPhongMaterial color="#fb923c" />
+      </mesh>
+      {/* Wheels */}
+      <mesh position={[0.05, 0, 0.09]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.03, 16]} />
+        <meshPhongMaterial color="#1f2937" />
+      </mesh>
+      <mesh position={[0.05, 0, -0.09]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.03, 16]} />
+        <meshPhongMaterial color="#1f2937" />
+      </mesh>
+      <mesh position={[-0.1, 0, 0.09]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.03, 16]} />
+        <meshPhongMaterial color="#1f2937" />
+      </mesh>
+      <mesh position={[-0.1, 0, -0.09]}>
+        <cylinderGeometry args={[0.04, 0.04, 0.03, 16]} />
+        <meshPhongMaterial color="#1f2937" />
+      </mesh>
+      <pointLight color="#f97316" intensity={0.5} distance={0.8} />
+    </group>
+  );
+}
+
+// 3D House at final destination
+function House() {
+  const meshRef = useRef<THREE.Group>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setVisible(true);
+    }, 12000);
+    
+    setTimeout(() => setVisible(true), 8000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useFrame(() => {
+    if (meshRef.current) {
+      meshRef.current.scale.setScalar(
+        THREE.MathUtils.lerp(meshRef.current.scale.x, visible ? 1 : 0, 0.1)
+      );
+    }
+  });
+
+  return (
+    <group ref={meshRef} position={[-2.2, 0.3, 1.8]} scale={0}>
+      {/* House base */}
+      <mesh position={[0, 0.12, 0]}>
+        <boxGeometry args={[0.35, 0.25, 0.3]} />
+        <meshPhongMaterial color="#e5e7eb" />
+      </mesh>
+      {/* Roof */}
+      <mesh position={[0, 0.32, 0]} rotation={[0, Math.PI / 4, 0]}>
+        <coneGeometry args={[0.25, 0.18, 4]} />
+        <meshPhongMaterial color="#3b82f6" />
+      </mesh>
+      {/* Door */}
+      <mesh position={[0.18, 0.08, 0]}>
+        <boxGeometry args={[0.02, 0.12, 0.08]} />
+        <meshPhongMaterial color="#f97316" />
+      </mesh>
+      {/* Windows */}
+      <mesh position={[0.18, 0.15, 0.08]}>
+        <boxGeometry args={[0.02, 0.05, 0.05]} />
+        <meshPhongMaterial color="#93c5fd" emissive="#3b82f6" emissiveIntensity={0.3} />
+      </mesh>
+      <mesh position={[0.18, 0.15, -0.08]}>
+        <boxGeometry args={[0.02, 0.05, 0.05]} />
+        <meshPhongMaterial color="#93c5fd" emissive="#3b82f6" emissiveIntensity={0.3} />
+      </mesh>
+      {/* Chimney */}
+      <mesh position={[0.08, 0.38, -0.08]}>
+        <boxGeometry args={[0.05, 0.12, 0.05]} />
+        <meshPhongMaterial color="#ef4444" />
+      </mesh>
+    </group>
+  );
+}
+
+// Floating packages around the scene
+function FloatingPackages() {
+  return (
+    <group>
+      <FloatingPackage position={[-1.5, 2, 1]} delay={0} />
+      <FloatingPackage position={[2, 1.5, -1]} delay={0.5} />
+      <FloatingPackage position={[1, -2, 1.5]} delay={1} />
+      <FloatingPackage position={[-2, -1, -1.5]} delay={1.5} />
+    </group>
+  );
+}
+
+function FloatingPackage({ position, delay }: { position: [number, number, number]; delay: number }) {
+  const meshRef = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (meshRef.current) {
+      meshRef.current.position.y = position[1] + Math.sin(state.clock.elapsedTime + delay) * 0.2;
+      meshRef.current.rotation.y += 0.01;
+    }
+  });
+
+  return (
+    <group ref={meshRef} position={position}>
+      <mesh>
+        <boxGeometry args={[0.15, 0.15, 0.15]} />
+        <meshPhongMaterial color="#d97706" />
+      </mesh>
+      {/* Package tape */}
+      <mesh>
+        <boxGeometry args={[0.16, 0.03, 0.16]} />
+        <meshPhongMaterial color="#fbbf24" />
+      </mesh>
+    </group>
+  );
+}
+
+// Camera animation
+function CameraController() {
+  const [phase, setPhase] = useState(0);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    
+    // Cinematic camera movement
+    state.camera.position.x = Math.sin(t * 0.1) * 1.5;
+    state.camera.position.y = 2 + Math.sin(t * 0.15) * 0.5;
+    state.camera.position.z = 6 + Math.cos(t * 0.1) * 0.5;
+    state.camera.lookAt(0, 0, 0);
+  });
+
+  return null;
+}
+
+const DeliveryAnimation = () => {
+  return (
+    <div className="relative w-full h-full">
+      <Canvas
+        camera={{ position: [0, 2, 6], fov: 45 }}
+        gl={{ alpha: true, antialias: true }}
+        style={{ background: 'transparent' }}
       >
-        {/* Main globe sphere with gradient */}
-        <svg width="400" height="400" viewBox="0 0 400 400" className="drop-shadow-2xl">
-          <defs>
-            {/* Gradient for globe */}
-            <radialGradient id="globeGradient" cx="35%" cy="35%">
-              <stop offset="0%" stopColor="hsl(215 90% 68%)" stopOpacity="0.15" />
-              <stop offset="50%" stopColor="hsl(215 90% 58%)" stopOpacity="0.08" />
-              <stop offset="100%" stopColor="hsl(215 90% 48%)" stopOpacity="0.05" />
-            </radialGradient>
-            
-            {/* Shadow gradient */}
-            <radialGradient id="shadowGradient" cx="50%" cy="50%">
-              <stop offset="0%" stopColor="hsl(215 30% 12%)" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="hsl(215 30% 12%)" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-
-          {/* Globe shadow */}
-          <ellipse cx="200" cy="350" rx="120" ry="20" fill="url(#shadowGradient)" />
-
-          {/* Main globe circle */}
-          <circle 
-            cx="200" 
-            cy="200" 
-            r="150" 
-            fill="url(#globeGradient)"
-            stroke="hsl(var(--primary))"
-            strokeWidth="1.5"
-            opacity="0.8"
-          />
-
-          {/* Latitude lines */}
-          <ellipse cx="200" cy="200" rx="150" ry="75" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.3" />
-          <ellipse cx="200" cy="200" rx="150" ry="40" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.3" />
-          <ellipse cx="200" cy="200" rx="150" ry="110" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.3" />
-
-          {/* Longitude lines */}
-          <ellipse cx="200" cy="200" rx="75" ry="150" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.3" />
-          <ellipse cx="200" cy="200" rx="40" ry="150" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.3" />
-          <ellipse cx="200" cy="200" rx="110" ry="150" fill="none" stroke="hsl(var(--primary))" strokeWidth="0.8" opacity="0.3" />
-
-          {/* Equator */}
-          <line x1="50" y1="200" x2="350" y2="200" stroke="hsl(var(--primary))" strokeWidth="1" opacity="0.4" />
-          
-          {/* Prime meridian */}
-          <line x1="200" y1="50" x2="200" y2="350" stroke="hsl(var(--primary))" strokeWidth="1" opacity="0.4" />
-
-          {/* Subtle continent shapes (simplified) */}
-          <path
-            d="M 120,180 Q 130,170 140,175 L 155,185 Q 160,190 155,195 L 145,200 Q 135,195 130,190 Z"
-            fill="hsl(var(--primary))"
-            opacity="0.15"
-          />
-          <path
-            d="M 240,160 Q 250,155 260,160 L 270,170 Q 275,180 265,185 L 250,180 Q 245,175 240,170 Z"
-            fill="hsl(var(--primary))"
-            opacity="0.15"
-          />
-          <path
-            d="M 180,220 Q 190,215 200,220 L 210,230 Q 215,240 205,245 L 190,240 Q 185,235 180,230 Z"
-            fill="hsl(var(--primary))"
-            opacity="0.15"
-          />
-        </svg>
-      </motion.div>
-
-      {/* Flight path - curved line across globe */}
-      <svg 
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        viewBox="0 0 400 400"
-      >
-        <defs>
-          <linearGradient id="pathGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity="0.3" />
-            <stop offset="50%" stopColor="hsl(var(--accent))" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="hsl(var(--accent))" stopOpacity="0.8" />
-          </linearGradient>
-        </defs>
+        {/* Lighting setup for premium look */}
+        <ambientLight intensity={0.4} />
+        <directionalLight position={[5, 5, 5]} intensity={1} color="#ffffff" />
+        <directionalLight position={[-3, 3, -3]} intensity={0.4} color="#3b82f6" />
+        <pointLight position={[0, 0, 0]} intensity={0.5} color="#60a5fa" />
         
-        {/* Curved flight path */}
-        <motion.path
-          d="M 80,180 Q 200,100 320,200"
-          fill="none"
-          stroke="url(#pathGradient)"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeDasharray="1000"
-          initial={{ strokeDashoffset: 1000 }}
-          animate={{ strokeDashoffset: 0 }}
-          transition={{
-            duration: 3,
-            ease: "easeInOut",
-            repeat: Infinity,
-            repeatDelay: 5,
-          }}
-        />
-      </svg>
-
-      {/* Airplane animation along path */}
-      <motion.div
-        className="absolute"
-        initial={{ offsetDistance: "0%" }}
-        animate={{
-          offsetDistance: ["0%", "100%"],
-        }}
-        transition={{
-          duration: 8,
-          repeat: Infinity,
-          ease: "easeInOut",
-        }}
-        style={{
-          offsetPath: "path('M 80,180 Q 200,100 320,200')",
-          offsetRotate: "auto",
-        }}
-      >
-        <div className="relative -ml-8 -mt-8">
-          <div className="absolute -inset-4 bg-primary/20 blur-xl rounded-full" />
-          <svg width="64" height="64" viewBox="0 0 64 64">
-            <defs>
-              <linearGradient id="planeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="hsl(var(--primary))" />
-                <stop offset="100%" stopColor="hsl(var(--primary-glow))" />
-              </linearGradient>
-            </defs>
-            <g transform="translate(32, 32)">
-              {/* Plane body */}
-              <path
-                d="M 0,-20 L 8,-8 L 4,0 L 8,8 L 0,20 L -8,8 L -4,0 L -8,-8 Z"
-                fill="url(#planeGradient)"
-                stroke="hsl(var(--primary-foreground))"
-                strokeWidth="1.5"
-              />
-              {/* Plane wings */}
-              <path
-                d="M -15,0 L -8,-4 L 8,-4 L 15,0 L 8,4 L -8,4 Z"
-                fill="url(#planeGradient)"
-                stroke="hsl(var(--primary-foreground))"
-                strokeWidth="1"
-                opacity="0.9"
-              />
-            </g>
-          </svg>
-        </div>
-      </motion.div>
-
-      {/* Truck animation (appears at destination) */}
-      <motion.div
-        className="absolute"
-        style={{ left: "65%", top: "48%" }}
-        initial={{ x: -60, opacity: 0, scale: 0.8 }}
-        animate={{
-          x: [0, 120],
-          opacity: [0, 1, 1, 0],
-          scale: [0.8, 1, 1, 0.8],
-        }}
-        transition={{
-          duration: 4,
-          repeat: Infinity,
-          repeatDelay: 4,
-          times: [0, 0.3, 0.8, 1],
-          ease: "easeInOut",
-        }}
-      >
-        <div className="relative">
-          <div className="absolute -inset-3 bg-accent/20 blur-lg rounded-lg" />
-          <svg width="70" height="50" viewBox="0 0 70 50">
-            <defs>
-              <linearGradient id="truckGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="hsl(var(--accent))" />
-                <stop offset="100%" stopColor="hsl(var(--accent-glow))" />
-              </linearGradient>
-            </defs>
-            {/* Truck body */}
-            <rect x="8" y="12" width="38" height="22" rx="3" fill="url(#truckGradient)" />
-            <rect x="42" y="18" width="22" height="16" rx="2" fill="url(#truckGradient)" />
-            {/* Wheels */}
-            <circle cx="18" cy="38" r="6" fill="hsl(var(--foreground))" />
-            <circle cx="52" cy="38" r="6" fill="hsl(var(--foreground))" />
-            {/* Wheel centers */}
-            <circle cx="18" cy="38" r="3" fill="hsl(var(--card))" />
-            <circle cx="52" cy="38" r="3" fill="hsl(var(--card))" />
-          </svg>
-        </div>
-      </motion.div>
-
-      {/* House (delivery destination) */}
-      <motion.div
-        className="absolute"
-        style={{ right: "10%", bottom: "25%" }}
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{
-          scale: [0, 1.1, 1],
-          opacity: [0, 1, 1],
-        }}
-        transition={{
-          duration: 1.2,
-          delay: 8,
-          repeat: Infinity,
-          repeatDelay: 6.8,
-          ease: [0.34, 1.56, 0.64, 1],
-        }}
-      >
-        <div className="relative">
-          <div className="absolute -inset-4 bg-primary/15 blur-xl rounded-full" />
-          <svg width="90" height="90" viewBox="0 0 90 90">
-            <defs>
-              <linearGradient id="roofGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="hsl(var(--primary-dark))" />
-                <stop offset="100%" stopColor="hsl(var(--primary))" />
-              </linearGradient>
-              <linearGradient id="doorGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="hsl(var(--accent))" />
-                <stop offset="100%" stopColor="hsl(var(--accent-glow))" />
-              </linearGradient>
-            </defs>
-            
-            {/* House shadow */}
-            <ellipse cx="45" cy="82" rx="30" ry="5" fill="hsl(var(--foreground))" opacity="0.1" />
-            
-            {/* House roof */}
-            <path d="M 45,18 L 75,48 L 15,48 Z" fill="url(#roofGradient)" />
-            <path d="M 45,18 L 75,48 L 15,48 Z" fill="none" stroke="hsl(var(--primary-foreground))" strokeWidth="1.5" opacity="0.3" />
-            
-            {/* House body */}
-            <rect x="20" y="48" width="50" height="35" fill="hsl(var(--card))" stroke="hsl(var(--border))" strokeWidth="2" rx="2" />
-            
-            {/* Windows */}
-            <rect x="26" y="54" width="12" height="12" fill="hsl(var(--primary) / 0.2)" stroke="hsl(var(--primary))" strokeWidth="1.5" rx="1" />
-            <rect x="52" y="54" width="12" height="12" fill="hsl(var(--primary) / 0.2)" stroke="hsl(var(--primary))" strokeWidth="1.5" rx="1" />
-            <line x1="32" y1="54" x2="32" y2="66" stroke="hsl(var(--primary))" strokeWidth="1" opacity="0.5" />
-            <line x1="58" y1="54" x2="58" y2="66" stroke="hsl(var(--primary))" strokeWidth="1" opacity="0.5" />
-            <line x1="26" y1="60" x2="38" y2="60" stroke="hsl(var(--primary))" strokeWidth="1" opacity="0.5" />
-            <line x1="52" y1="60" x2="64" y2="60" stroke="hsl(var(--primary))" strokeWidth="1" opacity="0.5" />
-            
-            {/* Door */}
-            <rect x="38" y="61" width="14" height="22" fill="url(#doorGradient)" rx="2" />
-            <circle cx="48" cy="72" r="1.5" fill="hsl(var(--accent-foreground))" />
-          </svg>
-
-          {/* Package delivery check mark */}
-          <motion.div
-            className="absolute -top-2 -right-2"
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{
-              scale: [0, 1.2, 1],
-              rotate: [180, 0, 0],
-            }}
-            transition={{
-              duration: 0.6,
-              delay: 9,
-              repeat: Infinity,
-              repeatDelay: 7.4,
-              ease: [0.34, 1.56, 0.64, 1],
-            }}
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-accent-glow flex items-center justify-center shadow-glow-accent">
-              <svg width="16" height="16" viewBox="0 0 16 16">
-                <path
-                  d="M 2,8 L 6,12 L 14,4"
-                  fill="none"
-                  stroke="hsl(var(--accent-foreground))"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-          </motion.div>
-        </div>
-      </motion.div>
+        {/* Main 3D scene elements */}
+        <Globe />
+        <Airplane />
+        <Warehouse />
+        <DeliveryTruck />
+        <House />
+        <FloatingPackages />
+        
+        {/* Camera animation */}
+        <CameraController />
+        
+        {/* Subtle fog for depth */}
+        <fog attach="fog" args={['#f8fafc', 8, 15]} />
+      </Canvas>
+      
+      {/* Subtle glow effect behind globe */}
+      <div className="absolute inset-0 bg-gradient-radial from-primary/10 via-transparent to-transparent pointer-events-none" />
     </div>
   );
 };
