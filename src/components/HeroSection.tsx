@@ -66,13 +66,17 @@ const HeroSection = () => {
             </div>
           </motion.div>
 
-          {/* Animation - full width, integrated */}
+          {/* Animation - full width, integrated with gentle fade */}
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 1.2, delay: 0.3 }}
             className="relative w-full mb-16 -mx-6 px-6"
-            style={{ height: "600px", maxHeight: "70vh" }}
+            style={{ 
+              height: "clamp(400px, 52vh, 680px)",
+              maskImage: 'linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 8%, black 92%, transparent 100%)'
+            }}
           >
             <DeliveryAnimation />
           </motion.div>
