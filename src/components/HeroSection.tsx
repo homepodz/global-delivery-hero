@@ -66,13 +66,13 @@ const HeroSection = () => {
             </div>
           </motion.div>
 
-          {/* Animation - centered */}
+          {/* Animation - full width, integrated */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
+            initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1, delay: 0.3 }}
-            className="relative mx-auto mb-16"
-            style={{ maxWidth: "600px", height: "500px" }}
+            transition={{ duration: 1.2, delay: 0.3 }}
+            className="relative w-full mb-16 -mx-6 px-6"
+            style={{ height: "600px", maxHeight: "70vh" }}
           >
             <DeliveryAnimation />
           </motion.div>

@@ -102,19 +102,16 @@ const DeliveryAnimation = () => {
   }, []);
 
   return (
-    <div className="relative w-full h-full overflow-hidden">
-      {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#0f2744] to-[#1a3a5c]" />
-      
-      {/* Radial glow effect */}
-      <div className="absolute inset-0 bg-gradient-radial from-primary/10 via-transparent to-transparent opacity-60" />
-
-      {/* Map container */}
-      <div className="absolute inset-0 flex items-center justify-center p-4 md:p-8">
+    <div className="relative w-full h-full overflow-visible">
+      {/* Map container - no background, transparent blend */}
+      <div className="absolute inset-0 flex items-center justify-center">
         <svg
           viewBox="0 0 1200 600"
-          className="w-full h-full max-w-6xl"
-          style={{ filter: "drop-shadow(0 0 20px rgba(96, 165, 250, 0.3))" }}
+          className="w-full h-full max-w-7xl"
+          style={{ 
+            filter: "drop-shadow(0 0 30px rgba(96, 165, 250, 0.15))",
+            opacity: 0.95
+          }}
         >
           {/* World map simplified paths */}
           <WorldMapPaths />
@@ -140,6 +137,21 @@ const DeliveryAnimation = () => {
             />
           ))}
         </svg>
+
+        {/* Optional tagline overlay */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1, duration: 1 }}
+          className="absolute bottom-8 right-8 text-right"
+        >
+          <p className="text-sm md:text-base font-semibold text-primary/80 tracking-wide">
+            Global Network.
+          </p>
+          <p className="text-xs md:text-sm text-muted-foreground/70">
+            Fast Shipping.
+          </p>
+        </motion.div>
       </div>
 
       {/* Tooltip */}
@@ -169,10 +181,10 @@ const DeliveryAnimation = () => {
   );
 };
 
-// Simplified world map paths
+// Simplified world map paths with soft glow
 function WorldMapPaths() {
   return (
-    <g opacity="0.15" stroke="#60a5fa" strokeWidth="0.5" fill="none">
+    <g opacity="0.25" stroke="#60a5fa" strokeWidth="0.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
       {/* North America */}
       <path d="M 180 250 Q 200 200 250 180 Q 300 170 320 200 Q 330 240 300 280 Q 250 300 200 290 Z" />
       <path d="M 220 300 Q 240 320 260 340 Q 240 360 220 350 Z" />
