@@ -1,7 +1,6 @@
 import HeroSection from "@/components/HeroSection";
 import FeaturesSection from "@/components/FeaturesSection";
 import HowItWorksSection from "@/components/HowItWorksSection";
-import GlobalDelivery from "@/sections/GlobalDelivery"; // New section import
 import Footer from "@/components/Footer";
 import SocialProofToast from "@/components/SocialProofToast";
 
@@ -16,9 +15,6 @@ const Index = () => {
 
       {/* How It Works section */}
       <HowItWorksSection />
-
-      {/* Global Delivery map section */}
-      <GlobalDelivery />
 
       {/* Footer and social proof */}
       <Footer />
