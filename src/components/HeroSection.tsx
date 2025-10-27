@@ -51,7 +51,7 @@ const HeroSection = () => {
             transition={{ delay: 0.6 }}
           >
             <div className="text-center">
-              <div className="text-4xl md:text-5xl font-bold text-primary mb-1 tracking-tight">195+</div>
+              <div className="text-4xl md:text-5xl font-bold text-primary mb-1 tracking-tight">100+</div>
               <div className="text-sm md:text-base text-muted-foreground font-medium uppercase tracking-wider">Countries</div>
             </div>
             <div className="hidden md:block h-12 w-px bg-border" />
