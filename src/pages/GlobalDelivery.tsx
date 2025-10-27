@@ -12,9 +12,6 @@ export default function GlobalDelivery() {
         <p className="text-gray-600 dark:text-gray-300 mb-10">
           We deliver your products worldwide with speed, care, and precision.
         </p>
-<div style={{background:'#ffe8e8',color:'#b00020',padding:'8px',textAlign:'center',fontWeight:700}}>
-  DEBUG: GlobalDelivery is mounted
-</div>
 
         <WorldMap
           lineColor="#3b82f6"
