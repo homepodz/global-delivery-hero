@@ -1,733 +1,374 @@
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useRef, useState, useEffect } from "react";
-import * as THREE from "three";
-import { getRandomCity } from "@/data/mockShopActivity";
+import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 
-// Helper function to get position on sphere surface
-function getPositionOnSphere(longitude: number, latitude: number, radius: number) {
-  const phi = (90 - latitude) * (Math.PI / 180);
-  const theta = (longitude + 180) * (Math.PI / 180);
-  
-  const x = -(radius * Math.sin(phi) * Math.cos(theta));
-  const z = radius * Math.sin(phi) * Math.sin(theta);
-  const y = radius * Math.cos(phi);
-  
-  return new THREE.Vector3(x, y, z);
+interface City {
+  name: string;
+  x: number; // percentage position
+  y: number; // percentage position
+  region: string;
+  shippingDays: string;
+  flag: string;
 }
 
-// Helper to get surface normal at position
-function getSurfaceNormal(position: THREE.Vector3) {
-  return position.clone().normalize();
+interface Route {
+  from: City;
+  to: City;
+  color: string;
 }
 
-// Realistic Globe with latitude/longitude lines
-function Globe() {
-  const globeRef = useRef<THREE.Group>(null);
-  const [time, setTime] = useState(0);
-  
-  useFrame((state, delta) => {
-    setTime((t) => t + delta);
-    if (globeRef.current) {
-      // Slow rotation on tilted axis
-      globeRef.current.rotation.y = time * 0.05;
-    }
-  });
+// Major cities with their approximate positions on a flat map
+const cities: City[] = [
+  { name: "New York", x: 25, y: 38, region: "USA", shippingDays: "3–5 days", flag: "🇺🇸" },
+  { name: "Toronto", x: 23, y: 35, region: "Canada", shippingDays: "4–6 days", flag: "🇨🇦" },
+  { name: "London", x: 49, y: 32, region: "UK", shippingDays: "5–7 days", flag: "🇬🇧" },
+  { name: "Paris", x: 50, y: 35, region: "Europe", shippingDays: "5–7 days", flag: "🇪🇺" },
+  { name: "Dubai", x: 60, y: 45, region: "UAE", shippingDays: "6–9 days", flag: "🇦🇪" },
+  { name: "Riyadh", x: 58, y: 47, region: "Saudi Arabia", shippingDays: "7–10 days", flag: "🇸🇦" },
+  { name: "Singapore", x: 73, y: 55, region: "Singapore", shippingDays: "8–12 days", flag: "🇸🇬" },
+  { name: "Tokyo", x: 82, y: 37, region: "Japan", shippingDays: "7–10 days", flag: "🇯🇵" },
+  { name: "Sydney", x: 85, y: 72, region: "Australia", shippingDays: "10–14 days", flag: "🇦🇺" },
+];
 
-  return (
-    <group ref={globeRef} rotation={[0.2, 0, 0.1]}>
-      {/* Main globe sphere */}
-      <mesh>
-        <sphereGeometry args={[2.5, 64, 64]} />
-        <meshPhongMaterial 
-          color="#1e40af"
-          emissive="#0f172a"
-          emissiveIntensity={0.15}
-          shininess={60}
-          specular="#60a5fa"
-          transparent
-          opacity={0.98}
-        />
-      </mesh>
+// Connection routes between cities
+const routes: Route[] = [
+  { from: cities[0], to: cities[2], color: "#60a5fa" }, // NY to London
+  { from: cities[0], to: cities[4], color: "#3b82f6" }, // NY to Dubai
+  { from: cities[2], to: cities[3], color: "#60a5fa" }, // London to Paris
+  { from: cities[3], to: cities[4], color: "#3b82f6" }, // Paris to Dubai
+  { from: cities[4], to: cities[5], color: "#60a5fa" }, // Dubai to Riyadh
+  { from: cities[4], to: cities[6], color: "#3b82f6" }, // Dubai to Singapore
+  { from: cities[6], to: cities[7], color: "#60a5fa" }, // Singapore to Tokyo
+  { from: cities[6], to: cities[8], color: "#3b82f6" }, // Singapore to Sydney
+  { from: cities[1], to: cities[0], color: "#60a5fa" }, // Toronto to NY
+];
 
-      {/* Ocean gradient overlay */}
-      <mesh>
-        <sphereGeometry args={[2.51, 64, 64]} />
-        <meshBasicMaterial 
-          color="#3b82f6"
-          transparent
-          opacity={0.15}
-        />
-      </mesh>
-
-      {/* Latitude lines (horizontal circles) */}
-      {[-60, -30, 0, 30, 60].map((lat, i) => {
-        const radius = 2.52;
-        const y = Math.sin((lat * Math.PI) / 180) * radius;
-        const circleRadius = Math.cos((lat * Math.PI) / 180) * radius;
-        
-        return (
-          <mesh key={`lat-${i}`} rotation={[Math.PI / 2, 0, 0]} position={[0, y, 0]}>
-            <torusGeometry args={[circleRadius, 0.004, 8, 64]} />
-            <meshBasicMaterial color="#ffffff" opacity={0.25} transparent />
-          </mesh>
-        );
-      })}
-
-      {/* Longitude lines (vertical circles) */}
-      {[0, 30, 60, 90, 120, 150].map((lon, i) => (
-        <mesh key={`lon-${i}`} rotation={[0, (lon * Math.PI) / 180, 0]}>
-          <torusGeometry args={[2.52, 0.004, 8, 64]} />
-          <meshBasicMaterial color="#ffffff" opacity={0.25} transparent />
-        </mesh>
-      ))}
-
-      {/* Simplified continents */}
-      <Continents />
-
-      {/* Subtle atmosphere glow */}
-      <mesh>
-        <sphereGeometry args={[2.65, 32, 32]} />
-        <meshBasicMaterial
-          color="#60a5fa"
-          transparent
-          opacity={0.08}
-          side={THREE.BackSide}
-        />
-      </mesh>
-    </group>
-  );
-}
-
-// Minimalistic continent shapes
-function Continents() {
-  const continents = [
-    { lon: -100, lat: 45, scale: [0.7, 0.9, 0.05] }, // North America
-    { lon: 15, lat: 50, scale: [1.1, 0.6, 0.05] }, // Europe
-    { lon: 75, lat: 20, scale: [0.8, 0.7, 0.05] }, // Asia
-    { lon: 20, lat: 0, scale: [0.6, 0.9, 0.05] }, // Africa
-    { lon: -60, lat: -15, scale: [0.5, 0.8, 0.05] }, // South America
-    { lon: 135, lat: -25, scale: [0.6, 0.5, 0.05] }, // Australia
-  ];
-
-  return (
-    <group>
-      {continents.map((continent, i) => {
-        const pos = getPositionOnSphere(continent.lon, continent.lat, 2.53);
-        const normal = getSurfaceNormal(pos);
-        
-        // Create rotation to align with surface
-        const up = new THREE.Vector3(0, 1, 0);
-        const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
-        const euler = new THREE.Euler().setFromQuaternion(quaternion);
-        
-        return (
-          <mesh
-            key={i}
-            position={pos}
-            rotation={[euler.x, euler.y, euler.z]}
-          >
-            <boxGeometry args={continent.scale as [number, number, number]} />
-            <meshPhongMaterial 
-              color="#0c4a6e"
-              transparent
-              opacity={0.5}
-            />
-          </mesh>
-        );
-      })}
-    </group>
-  );
-}
-
-// Airplane following great-circle path on globe
-function Airplane({ onComplete }: { onComplete: () => void }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const [progress, setProgress] = useState(0);
-
-  // Flight path coordinates
-  const startLon = -100;
-  const startLat = 40;
-  const endLon = 15;
-  const endLat = 50;
-
-  useFrame((state, delta) => {
-    const newProgress = progress + delta * 0.08;
-    setProgress(newProgress);
-
-    if (newProgress >= 1 && onComplete) {
-      onComplete();
-    }
-
-    if (groupRef.current && newProgress < 1) {
-      // Interpolate along great circle
-      const lon = startLon + (endLon - startLon) * newProgress;
-      const lat = startLat + (endLat - startLat) * newProgress + 
-                  Math.sin(newProgress * Math.PI) * 8; // Arc over the globe
-      
-      const radius = 2.65;
-      const position = getPositionOnSphere(lon, lat, radius);
-      const normal = getSurfaceNormal(position);
-      
-      groupRef.current.position.copy(position);
-      
-      // Orient plane tangent to surface and facing direction of travel
-      const nextLon = lon + 2;
-      const nextLat = lat + (endLat - startLat) * 0.02;
-      const nextPos = getPositionOnSphere(nextLon, nextLat, radius);
-      const direction = nextPos.clone().sub(position).normalize();
-      
-      const up = normal;
-      const right = new THREE.Vector3().crossVectors(up, direction).normalize();
-      const forward = new THREE.Vector3().crossVectors(right, up).normalize();
-      
-      const matrix = new THREE.Matrix4();
-      matrix.makeBasis(right, up, forward);
-      groupRef.current.quaternion.setFromRotationMatrix(matrix);
-    }
-  });
-
-  if (progress > 1) return null;
-
-  return (
-    <group ref={groupRef}>
-      {/* Plane fuselage */}
-      <mesh rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.04, 0.06, 0.25, 8]} />
-        <meshPhongMaterial color="#f97316" emissive="#ea580c" emissiveIntensity={0.4} />
-      </mesh>
-      {/* Wings */}
-      <mesh position={[0, 0, 0]} rotation={[0, Math.PI / 2, 0]}>
-        <boxGeometry args={[0.4, 0.02, 0.08]} />
-        <meshPhongMaterial color="#fb923c" emissive="#f97316" emissiveIntensity={0.3} />
-      </mesh>
-      {/* Tail fin */}
-      <mesh position={[-0.12, 0.05, 0]} rotation={[0, 0, 0]}>
-        <boxGeometry args={[0.02, 0.08, 0.06]} />
-        <meshPhongMaterial color="#f97316" />
-      </mesh>
-      {/* Glow */}
-      <pointLight color="#f97316" intensity={1.5} distance={1.2} />
-    </group>
-  );
-}
-
-// Flight path trail
-function FlightPathTrail() {
-  const startLon = -100;
-  const startLat = 40;
-  const endLon = 15;
-  const endLat = 50;
-  const points: THREE.Vector3[] = [];
-  
-  for (let i = 0; i <= 50; i++) {
-    const t = i / 50;
-    const lon = startLon + (endLon - startLon) * t;
-    const lat = startLat + (endLat - startLat) * t + Math.sin(t * Math.PI) * 8;
-    points.push(getPositionOnSphere(lon, lat, 2.58));
-  }
-  
-  const curve = new THREE.CatmullRomCurve3(points);
-  const tubeGeometry = new THREE.TubeGeometry(curve, 50, 0.008, 8, false);
-  
-  return (
-    <mesh geometry={tubeGeometry}>
-      <meshPhongMaterial 
-        color="#60a5fa"
-        transparent
-        opacity={0.4}
-        emissive="#3b82f6"
-        emissiveIntensity={0.5}
-      />
-    </mesh>
-  );
-}
-
-// 3D Warehouse on globe surface
-function Warehouse({ visible }: { visible: boolean }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const lon = 15;
-  const lat = 50;
-  const radius = 2.5;
-
-  useFrame(() => {
-    if (groupRef.current) {
-      const targetScale = visible ? 1 : 0;
-      groupRef.current.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.1);
-    }
-  });
-
-  const position = getPositionOnSphere(lon, lat, radius);
-  const normal = getSurfaceNormal(position);
-  const up = new THREE.Vector3(0, 1, 0);
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
-  const euler = new THREE.Euler().setFromQuaternion(quaternion);
-
-  return (
-    <group
-      ref={groupRef}
-      position={position}
-      rotation={[euler.x, euler.y, euler.z]}
-      scale={0}
-    >
-      {/* Building */}
-      <mesh position={[0, 0.2, 0]}>
-        <boxGeometry args={[0.3, 0.35, 0.35]} />
-        <meshPhongMaterial color="#64748b" />
-      </mesh>
-      {/* Roof */}
-      <mesh position={[0, 0.4, 0]}>
-        <boxGeometry args={[0.32, 0.05, 0.37]} />
-        <meshPhongMaterial color="#475569" />
-      </mesh>
-      {/* Entrance */}
-      <mesh position={[0.16, 0.1, 0]}>
-        <boxGeometry args={[0.02, 0.2, 0.15]} />
-        <meshPhongMaterial color="#1e293b" />
-      </mesh>
-      {/* Location pin */}
-      <mesh position={[0, 0.65, 0]}>
-        <sphereGeometry args={[0.05, 16, 16]} />
-        <meshPhongMaterial color="#ef4444" emissive="#dc2626" emissiveIntensity={0.6} />
-      </mesh>
-      <mesh position={[0, 0.55, 0]}>
-        <coneGeometry args={[0.035, 0.15, 8]} />
-        <meshPhongMaterial color="#ef4444" emissive="#dc2626" emissiveIntensity={0.5} />
-      </mesh>
-      <pointLight color="#ef4444" intensity={0.8} distance={1} position={[0, 0.65, 0]} />
-    </group>
-  );
-}
-
-// Delivery truck path trail
-function TruckPathTrail({ visible }: { visible: boolean }) {
-  const startLon = 15;
-  const startLat = 50;
-  const endLon = -60;
-  const endLat = -15;
-  const points: THREE.Vector3[] = [];
-  
-  for (let i = 0; i <= 50; i++) {
-    const t = i / 50;
-    const lon = startLon + (endLon - startLon) * t;
-    const lat = startLat + (endLat - startLat) * t + Math.sin(t * Math.PI) * 10;
-    points.push(getPositionOnSphere(lon, lat, 2.58));
-  }
-  
-  const curve = new THREE.CatmullRomCurve3(points);
-  const tubeGeometry = new THREE.TubeGeometry(curve, 50, 0.008, 8, false);
-  
-  return (
-    <mesh geometry={tubeGeometry}>
-      <meshPhongMaterial 
-        color="#fbbf24"
-        transparent
-        opacity={visible ? 0.4 : 0}
-        emissive="#f59e0b"
-        emissiveIntensity={0.5}
-      />
-    </mesh>
-  );
-}
-
-// Delivery truck following surface
-function DeliveryTruck({ active }: { active: boolean }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const [progress, setProgress] = useState(0);
-
-  const startLon = 15;
-  const startLat = 50;
-  const endLon = -60;
-  const endLat = -15;
-
-  useFrame((state, delta) => {
-    if (active) {
-      setProgress((p) => Math.min(p + delta * 0.12, 1));
-    } else {
-      setProgress(0);
-    }
-
-    if (groupRef.current && active && progress < 1) {
-      const lon = startLon + (endLon - startLon) * progress;
-      const lat = startLat + (endLat - startLat) * progress + 
-                  Math.sin(progress * Math.PI) * 10;
-      
-      const radius = 2.58;
-      const position = getPositionOnSphere(lon, lat, radius);
-      const normal = getSurfaceNormal(position);
-      
-      groupRef.current.position.copy(position);
-      
-      // Orient truck tangent to surface
-      const nextLon = lon + 2;
-      const nextLat = lat + (endLat - startLat) * 0.02;
-      const nextPos = getPositionOnSphere(nextLon, nextLat, radius);
-      const direction = nextPos.clone().sub(position).normalize();
-      
-      const up = normal;
-      const right = new THREE.Vector3().crossVectors(up, direction).normalize();
-      const forward = new THREE.Vector3().crossVectors(right, up).normalize();
-      
-      const matrix = new THREE.Matrix4();
-      matrix.makeBasis(right, up, forward);
-      groupRef.current.quaternion.setFromRotationMatrix(matrix);
-      groupRef.current.rotateY(Math.PI / 2);
-    }
-  });
-
-  if (!active) return null;
-
-  return (
-    <group ref={groupRef}>
-      {/* Cabin */}
-      <mesh position={[0.06, 0.05, 0]}>
-        <boxGeometry args={[0.1, 0.1, 0.14]} />
-        <meshPhongMaterial color="#f97316" />
-      </mesh>
-      {/* Cargo container */}
-      <mesh position={[-0.08, 0.06, 0]}>
-        <boxGeometry args={[0.16, 0.12, 0.14]} />
-        <meshPhongMaterial color="#fb923c" />
-      </mesh>
-      {/* Wheels */}
-      <mesh position={[0.04, -0.02, 0.08]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.02, 12]} />
-        <meshPhongMaterial color="#1f2937" />
-      </mesh>
-      <mesh position={[0.04, -0.02, -0.08]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.02, 12]} />
-        <meshPhongMaterial color="#1f2937" />
-      </mesh>
-      <mesh position={[-0.1, -0.02, 0.08]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.02, 12]} />
-        <meshPhongMaterial color="#1f2937" />
-      </mesh>
-      <mesh position={[-0.1, -0.02, -0.08]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.03, 0.03, 0.02, 12]} />
-        <meshPhongMaterial color="#1f2937" />
-      </mesh>
-      {/* Headlights glow */}
-      <pointLight color="#fbbf24" intensity={0.8} distance={0.8} position={[0.12, 0, 0]} />
-    </group>
-  );
-}
-
-// 3D House at destination
-function House({ visible }: { visible: boolean }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const lon = -60;
-  const lat = -15;
-  const radius = 2.5;
-
-  useFrame(() => {
-    if (groupRef.current) {
-      const targetScale = visible ? 1 : 0.3;
-      const currentScale = groupRef.current.scale.x;
-      groupRef.current.scale.setScalar(
-        THREE.MathUtils.lerp(currentScale, targetScale, 0.1)
-      );
-    }
-  });
-
-  const position = getPositionOnSphere(lon, lat, radius);
-  const normal = getSurfaceNormal(position);
-  const up = new THREE.Vector3(0, 1, 0);
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
-  const euler = new THREE.Euler().setFromQuaternion(quaternion);
-
-  return (
-    <group
-      ref={groupRef}
-      position={position}
-      rotation={[euler.x, euler.y, euler.z]}
-      scale={0.3}
-    >
-      {/* House walls */}
-      <mesh position={[0, 0.15, 0]}>
-        <boxGeometry args={[0.3, 0.3, 0.28]} />
-        <meshPhongMaterial color="#e5e7eb" />
-      </mesh>
-      {/* Roof */}
-      <mesh position={[0, 0.35, 0]} rotation={[0, Math.PI / 4, 0]}>
-        <coneGeometry args={[0.22, 0.2, 4]} />
-        <meshPhongMaterial color="#3b82f6" />
-      </mesh>
-      {/* Door */}
-      <mesh position={[0.16, 0.08, 0]}>
-        <boxGeometry args={[0.02, 0.15, 0.1]} />
-        <meshPhongMaterial color="#f97316" />
-      </mesh>
-      {/* Windows */}
-      <mesh position={[0.16, 0.18, 0.08]}>
-        <boxGeometry args={[0.02, 0.06, 0.06]} />
-        <meshPhongMaterial 
-          color="#93c5fd"
-          emissive="#3b82f6"
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-      <mesh position={[0.16, 0.18, -0.08]}>
-        <boxGeometry args={[0.02, 0.06, 0.06]} />
-        <meshPhongMaterial 
-          color="#93c5fd"
-          emissive="#3b82f6"
-          emissiveIntensity={0.3}
-        />
-      </mesh>
-      {/* Chimney */}
-      <mesh position={[0.08, 0.42, -0.08]}>
-        <boxGeometry args={[0.04, 0.1, 0.04]} />
-        <meshPhongMaterial color="#dc2626" />
-      </mesh>
-    </group>
-  );
-}
-
-// Cinematic camera controller
-function CameraController({ phase }: { phase: number }) {
-  useFrame((state) => {
-    const camera = state.camera;
-    const t = state.clock.elapsedTime * 0.15;
-
-    if (phase === 0) {
-      // Initial view - front angle
-      camera.position.x = Math.sin(t) * 0.5;
-      camera.position.y = 2.5 + Math.sin(t * 0.8) * 0.3;
-      camera.position.z = 7;
-    } else if (phase === 1) {
-      // Following plane - orbit view
-      const angle = t * 0.8;
-      camera.position.x = Math.cos(angle) * 5;
-      camera.position.y = 2.8 + Math.sin(t * 0.5) * 0.4;
-      camera.position.z = Math.sin(angle) * 5;
-    } else if (phase === 2) {
-      // Warehouse approach - closer view
-      camera.position.x = 3 + Math.sin(t * 0.5) * 0.5;
-      camera.position.y = 2.2;
-      camera.position.z = 5 + Math.cos(t * 0.5) * 0.5;
-    } else {
-      // Truck journey - following orbit
-      const angle = t * 0.6 + Math.PI;
-      camera.position.x = Math.cos(angle) * 5.5;
-      camera.position.y = 2 + Math.sin(t * 0.6) * 0.5;
-      camera.position.z = Math.sin(angle) * 5.5;
-    }
-
-    camera.lookAt(0, 0, 0);
-  });
-
-  return null;
-}
-
-// City delivery pings
-interface Ping {
+// Traveling package dots
+interface TravelingDot {
   id: number;
-  position: THREE.Vector3;
-  startTime: number;
-  city: string;
+  route: Route;
+  progress: number;
+  speed: number;
 }
 
-function DeliveryPings() {
-  const [pings, setPings] = useState<Ping[]>([]);
-  const nextId = useRef(0);
+const DeliveryAnimation = () => {
+  const [hoveredCity, setHoveredCity] = useState<City | null>(null);
+  const [travelingDots, setTravelingDots] = useState<TravelingDot[]>([]);
+  const nextDotId = useRef(0);
 
+  // Add traveling dots periodically
   useEffect(() => {
-    const addPing = () => {
-      const city = getRandomCity();
-      const position = getPositionOnSphere(city.lon, city.lat, 2.55);
+    const addDot = () => {
+      const route = routes[Math.floor(Math.random() * routes.length)];
+      const newDot: TravelingDot = {
+        id: nextDotId.current++,
+        route,
+        progress: 0,
+        speed: 0.003 + Math.random() * 0.005, // Random speed
+      };
       
-      setPings((prev) => [
-        ...prev,
-        {
-          id: nextId.current++,
-          position,
-          startTime: Date.now(),
-          city: city.name,
-        },
-      ]);
+      setTravelingDots((prev) => [...prev, newDot]);
 
-      // Remove old pings after animation
+      // Remove dot after completion
       setTimeout(() => {
-        setPings((prev) => prev.filter((p) => p.id !== nextId.current - 1));
-      }, 3000);
+        setTravelingDots((prev) => prev.filter((d) => d.id !== newDot.id));
+      }, 12000);
     };
 
-    // Initial ping
-    const initialDelay = Math.random() * 3000 + 2000;
-    const initialTimer = setTimeout(addPing, initialDelay);
-
-    // Recurring pings with jitter (4-9s)
-    const scheduleNext = () => {
-      const interval = Math.random() * 5000 + 4000;
-      return setTimeout(() => {
-        addPing();
-        scheduleNext();
-      }, interval);
-    };
-
-    const recurringTimer = scheduleNext();
+    // Initial dots
+    const initialTimer = setTimeout(addDot, 500);
+    
+    // Add new dots periodically
+    const interval = setInterval(addDot, 3000 + Math.random() * 2000);
 
     return () => {
       clearTimeout(initialTimer);
-      clearTimeout(recurringTimer);
+      clearInterval(interval);
     };
   }, []);
 
-  return (
-    <group>
-      {pings.map((ping) => (
-        <Ping key={ping.id} {...ping} />
-      ))}
-    </group>
-  );
-}
-
-function Ping({ position, startTime, city }: Ping) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
-
-  useFrame(() => {
-    const elapsed = Date.now() - startTime;
-    const t = Math.min(elapsed / 2500, 1); // 2.5s total animation
-
-    if (meshRef.current && glowRef.current) {
-      // Fade in, hold, fade out
-      let opacity = 0;
-      if (t < 0.15) {
-        opacity = t / 0.15; // Fade in
-      } else if (t < 0.7) {
-        opacity = 1; // Hold
-      } else {
-        opacity = 1 - (t - 0.7) / 0.3; // Fade out
-      }
-
-      // Pulsing scale
-      const scale = 1 + Math.sin(t * Math.PI * 3) * 0.3;
-      meshRef.current.scale.setScalar(scale * 0.08);
-      glowRef.current.scale.setScalar(scale * 0.15);
-
-      // Update opacity
-      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = opacity * 0.9;
-      (glowRef.current.material as THREE.MeshBasicMaterial).opacity = opacity * 0.4;
-    }
-  });
-
-  const normal = getSurfaceNormal(position);
-  const up = new THREE.Vector3(0, 1, 0);
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, normal);
-  const euler = new THREE.Euler().setFromQuaternion(quaternion);
-
-  return (
-    <group position={position} rotation={[euler.x, euler.y, euler.z]}>
-      {/* Core ping */}
-      <mesh ref={meshRef}>
-        <circleGeometry args={[1, 32]} />
-        <meshBasicMaterial
-          color="#60a5fa"
-          transparent
-          opacity={0}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      {/* Glow ring */}
-      <mesh ref={glowRef} position={[0, 0, -0.01]}>
-        <ringGeometry args={[0.8, 1.4, 32]} />
-        <meshBasicMaterial
-          color="#3b82f6"
-          transparent
-          opacity={0}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      {/* Small point light for extra glow */}
-      <pointLight color="#60a5fa" intensity={0.5} distance={0.5} />
-    </group>
-  );
-}
-
-// Main animation component
-const DeliveryAnimation = () => {
-  const [phase, setPhase] = useState(0);
-  const [showWarehouse, setShowWarehouse] = useState(false);
-  const [truckActive, setTruckActive] = useState(false);
-  const [showHouse, setShowHouse] = useState(true);
-
+  // Animate dots
   useEffect(() => {
-    // Phase 0: Plane appears and flies (0-8s)
-    const phase1Timer = setTimeout(() => {
-      setPhase(1);
-      setShowWarehouse(true);
-    }, 8000);
-
-    // Phase 2: Warehouse visible, truck starts (8-9s)
-    const phase2Timer = setTimeout(() => {
-      setPhase(2);
-      setTruckActive(true);
-    }, 9000);
-
-    // Phase 3: Truck journey (9-18s)
-    const phase3Timer = setTimeout(() => {
-      setPhase(3);
-    }, 12000);
-
-    // Reset loop (18s)
-    const resetTimer = setTimeout(() => {
-      setPhase(0);
-      setShowWarehouse(false);
-      setTruckActive(false);
-    }, 20000);
-
-    return () => {
-      clearTimeout(phase1Timer);
-      clearTimeout(phase2Timer);
-      clearTimeout(phase3Timer);
-      clearTimeout(resetTimer);
+    const animate = () => {
+      setTravelingDots((prev) =>
+        prev.map((dot) => ({
+          ...dot,
+          progress: Math.min(dot.progress + dot.speed, 1),
+        }))
+      );
     };
+
+    const intervalId = setInterval(animate, 16); // ~60fps
+    return () => clearInterval(intervalId);
   }, []);
 
   return (
-    <div className="relative w-full h-full">
-      <Canvas
-        camera={{ position: [0, 2.5, 7], fov: 40 }}
-        gl={{ alpha: true, antialias: true }}
-        style={{ background: 'transparent' }}
-      >
-        {/* Premium lighting setup */}
-        <ambientLight intensity={0.3} />
-        <directionalLight 
-          position={[8, 6, 5]} 
-          intensity={1.2} 
-          color="#ffffff"
-          castShadow
-        />
-        <directionalLight 
-          position={[-5, 3, -4]} 
-          intensity={0.4} 
-          color="#3b82f6"
-        />
-        <hemisphereLight 
-          color="#60a5fa" 
-          groundColor="#1e40af" 
-          intensity={0.5}
-        />
-        
-        {/* Scene elements */}
-        <Globe />
-        <DeliveryPings />
-        <FlightPathTrail />
-        <TruckPathTrail visible={truckActive} />
-        {phase === 0 && <Airplane onComplete={() => setShowWarehouse(true)} />}
-        <Warehouse visible={showWarehouse} />
-        <DeliveryTruck active={truckActive} />
-        <House visible={showHouse} />
-        
-        {/* Cinematic camera */}
-        <CameraController phase={phase} />
-      </Canvas>
-      
+    <div className="relative w-full h-full overflow-hidden">
       {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-radial from-primary/5 via-transparent to-transparent pointer-events-none -z-10" />
+      <div className="absolute inset-0 bg-gradient-to-br from-[#0a1628] via-[#0f2744] to-[#1a3a5c]" />
+      
+      {/* Radial glow effect */}
+      <div className="absolute inset-0 bg-gradient-radial from-primary/10 via-transparent to-transparent opacity-60" />
+
+      {/* Map container */}
+      <div className="absolute inset-0 flex items-center justify-center p-4 md:p-8">
+        <svg
+          viewBox="0 0 1200 600"
+          className="w-full h-full max-w-6xl"
+          style={{ filter: "drop-shadow(0 0 20px rgba(96, 165, 250, 0.3))" }}
+        >
+          {/* World map simplified paths */}
+          <WorldMapPaths />
+
+          {/* Connection routes */}
+          {routes.map((route, idx) => (
+            <ConnectionLine key={idx} route={route} />
+          ))}
+
+          {/* Traveling dots */}
+          {travelingDots.map((dot) => (
+            <TravelingDot key={dot.id} dot={dot} />
+          ))}
+
+          {/* City nodes */}
+          {cities.map((city, idx) => (
+            <CityNode
+              key={idx}
+              city={city}
+              isHovered={hoveredCity?.name === city.name}
+              onHover={() => setHoveredCity(city)}
+              onLeave={() => setHoveredCity(null)}
+            />
+          ))}
+        </svg>
+      </div>
+
+      {/* Tooltip */}
+      {hoveredCity && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50"
+        >
+          <div className="bg-background/95 backdrop-blur-lg border border-primary/20 rounded-xl px-6 py-4 shadow-2xl shadow-primary/20">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{hoveredCity.flag}</span>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {hoveredCity.name}, {hoveredCity.region}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Fast shipping: {hoveredCity.shippingDays}
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };
+
+// Simplified world map paths
+function WorldMapPaths() {
+  return (
+    <g opacity="0.15" stroke="#60a5fa" strokeWidth="0.5" fill="none">
+      {/* North America */}
+      <path d="M 180 250 Q 200 200 250 180 Q 300 170 320 200 Q 330 240 300 280 Q 250 300 200 290 Z" />
+      <path d="M 220 300 Q 240 320 260 340 Q 240 360 220 350 Z" />
+      
+      {/* South America */}
+      <path d="M 280 360 Q 300 380 310 420 Q 300 460 280 480 Q 260 460 250 420 Q 255 380 280 360 Z" />
+      
+      {/* Europe */}
+      <path d="M 540 200 Q 580 180 620 190 Q 640 210 630 240 Q 600 250 560 240 Z" />
+      
+      {/* Africa */}
+      <path d="M 560 280 Q 600 270 640 290 Q 660 330 650 380 Q 620 420 580 440 Q 550 420 540 380 Q 530 320 560 280 Z" />
+      
+      {/* Asia */}
+      <path d="M 680 200 Q 740 180 800 190 Q 860 200 920 210 Q 960 240 950 280 Q 920 300 880 310 Q 820 300 760 280 Q 700 260 680 220 Z" />
+      <path d="M 800 320 Q 840 340 860 380 Q 850 420 820 440 Q 780 430 760 400 Q 770 360 800 320 Z" />
+      
+      {/* Australia */}
+      <path d="M 920 430 Q 960 420 1000 440 Q 1020 470 1000 500 Q 960 510 920 490 Q 910 460 920 430 Z" />
+    </g>
+  );
+}
+
+// Connection line between cities
+function ConnectionLine({ route }: { route: Route }) {
+  const x1 = (route.from.x / 100) * 1200;
+  const y1 = (route.from.y / 100) * 600;
+  const x2 = (route.to.x / 100) * 1200;
+  const y2 = (route.to.y / 100) * 600;
+
+  // Calculate control point for curved line
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2 - 50;
+
+  const pathD = `M ${x1} ${y1} Q ${midX} ${midY} ${x2} ${y2}`;
+
+  return (
+    <g>
+      {/* Glow layer */}
+      <path
+        d={pathD}
+        stroke={route.color}
+        strokeWidth="2"
+        fill="none"
+        opacity="0.3"
+        strokeLinecap="round"
+        style={{ filter: "blur(4px)" }}
+      >
+        <animate
+          attributeName="opacity"
+          values="0.2;0.5;0.2"
+          dur="3s"
+          repeatCount="indefinite"
+        />
+      </path>
+      
+      {/* Main line */}
+      <path
+        d={pathD}
+        stroke={route.color}
+        strokeWidth="1"
+        fill="none"
+        opacity="0.6"
+        strokeLinecap="round"
+        strokeDasharray="4 4"
+      >
+        <animate
+          attributeName="stroke-dashoffset"
+          from="0"
+          to="8"
+          dur="1s"
+          repeatCount="indefinite"
+        />
+      </path>
+    </g>
+  );
+}
+
+// Traveling dot along route
+function TravelingDot({ dot }: { dot: TravelingDot }) {
+  const { route, progress } = dot;
+  
+  const x1 = (route.from.x / 100) * 1200;
+  const y1 = (route.from.y / 100) * 600;
+  const x2 = (route.to.x / 100) * 1200;
+  const y2 = (route.to.y / 100) * 600;
+
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2 - 50;
+
+  // Quadratic bezier curve interpolation
+  const t = progress;
+  const x = (1 - t) * (1 - t) * x1 + 2 * (1 - t) * t * midX + t * t * x2;
+  const y = (1 - t) * (1 - t) * y1 + 2 * (1 - t) * t * midY + t * t * y2;
+
+  return (
+    <g opacity={1 - progress}>
+      {/* Glow */}
+      <circle cx={x} cy={y} r="8" fill={route.color} opacity="0.3" style={{ filter: "blur(6px)" }} />
+      
+      {/* Core */}
+      <circle cx={x} cy={y} r="3" fill="#ffffff" opacity="0.9">
+        <animate
+          attributeName="r"
+          values="3;5;3"
+          dur="1.5s"
+          repeatCount="indefinite"
+        />
+      </circle>
+    </g>
+  );
+}
+
+// City node with pulsing effect
+function CityNode({
+  city,
+  isHovered,
+  onHover,
+  onLeave,
+}: {
+  city: City;
+  isHovered: boolean;
+  onHover: () => void;
+  onLeave: () => void;
+}) {
+  const x = (city.x / 100) * 1200;
+  const y = (city.y / 100) * 600;
+
+  return (
+    <g
+      onMouseEnter={onHover}
+      onMouseLeave={onLeave}
+      style={{ cursor: "pointer" }}
+    >
+      {/* Outer glow ring */}
+      <circle cx={x} cy={y} r="20" fill="#60a5fa" opacity="0.1">
+        <animate
+          attributeName="r"
+          values="15;25;15"
+          dur="2s"
+          repeatCount="indefinite"
+        />
+        <animate
+          attributeName="opacity"
+          values="0.3;0.1;0.3"
+          dur="2s"
+          repeatCount="indefinite"
+        />
+      </circle>
+
+      {/* Middle ring */}
+      <circle
+        cx={x}
+        cy={y}
+        r="12"
+        fill="none"
+        stroke="#60a5fa"
+        strokeWidth="1"
+        opacity="0.4"
+      />
+
+      {/* Inner glow */}
+      <circle cx={x} cy={y} r="8" fill="#3b82f6" opacity="0.6" style={{ filter: "blur(3px)" }} />
+
+      {/* Core dot */}
+      <circle
+        cx={x}
+        cy={y}
+        r={isHovered ? "6" : "5"}
+        fill="#ffffff"
+        style={{ transition: "all 0.2s ease" }}
+      >
+        <animate
+          attributeName="opacity"
+          values="0.8;1;0.8"
+          dur="1.5s"
+          repeatCount="indefinite"
+        />
+      </circle>
+
+      {/* Label */}
+      {isHovered && (
+        <text
+          x={x}
+          y={y - 30}
+          textAnchor="middle"
+          fill="#ffffff"
+          fontSize="14"
+          fontWeight="600"
+          style={{ pointerEvents: "none" }}
+        >
+          {city.name}
+        </text>
+      )}
+    </g>
+  );
+}
 
 export default DeliveryAnimation;
